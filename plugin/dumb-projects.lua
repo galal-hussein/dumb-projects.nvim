@@ -1,0 +1,1 @@
+require("dumb-projects").setup()
