@@ -9,14 +9,24 @@ M.project = {}
 ---@field  projects M.project[]
 M.projects = {}
 
-M.projects_dir = vim.fn.stdpath("data") .. "/dumb-projects.nvim/data"
+M.projects_dir = vim.fn.stdpath("data") .. "/dumb-projects.nvim"
 M.projects_path = M.projects_dir .. "/projects.json"
 
 function M.setup()
   -- create the base dir and projects file
-  vim.fn.mkdir(M.projects_dir, "p")
-  local project_file = io.open(M.projects_path, "a")
-  io.close(project_file)
+  local ok, err, err_name = vim.uv.fs_mkdir(M.projects_dir, tonumber("755", 8))
+  if not ok and err_name ~= "EEXIST" then
+    error("failed to create dir for dumb-projects: " .. err)
+  end
+  local f
+  f, err = vim.uv.fs_open(M.projects_path, "a", tonumber("644", 8))
+  if err then
+    error("failed to create projects.json file: " .. err)
+  end
+  if f then
+    vim.uv.fs_close(f)
+  end
+
   -- TODO: add options to the plugin
 end
 
@@ -31,9 +41,11 @@ end
 
 function M.find_projects()
   local projects_blob = vim.fn.readblob(M.projects_path)
-  local projects = vim.json.decode(projects_blob)
+  local projects = {}
+  pcall(function()
+    projects = vim.json.decode(projects_blob)
+  end)
   M.current_window = vim.api.nvim_get_current_win()
-
   M.render_projects_ui(projects)
 end
 
@@ -43,8 +55,12 @@ function M.add_ui_events(win, projects)
   local buf = vim.api.nvim_win_get_buf(win)
   -- Open Project
   vim.keymap.set("n", "<CR>", function()
-    local row_col = vim.api.nvim_win_get_cursor(M.ui)
-    vim.api.nvim_set_current_dir(projects[row_col[1]].path)
+    if #projects == 0 then
+      return
+    end
+
+    local row = unpack(vim.api.nvim_win_get_cursor(M.ui))
+    vim.api.nvim_set_current_dir(projects[row].path)
     vim.api.nvim_win_close(M.ui, true)
     -- open a file picker here, as a place holder we will fff
     -- but this should be customizable
@@ -65,9 +81,16 @@ function M.add_ui_events(win, projects)
       path = project_path,
     }
 
-    table.insert(projects, #projects, project)
+    -- do not add project if it already exists
+    for _, existing_projects in ipairs(projects) do
+      if existing_projects.name == project.name then
+        vim.notify("project already exists")
+        return
+      end
+    end
 
-    -- write to file
+    table.insert(projects, project)
+
     local projects_json = vim.json.encode(projects)
     vim.fn.writefile({ projects_json }, M.projects_path)
 
@@ -78,14 +101,20 @@ function M.add_ui_events(win, projects)
   })
   -- Delete Project
   vim.keymap.set("n", "<C-x>", function()
-    local row_col = vim.api.nvim_win_get_cursor(M.ui)
-    table.remove(projects, row_col[0])
+    local row = unpack(vim.api.nvim_win_get_cursor(M.ui))
+    table.remove(projects, row)
 
-    -- write to file
     local projects_json = vim.json.encode(projects)
     vim.fn.writefile({ projects_json }, M.projects_path)
 
     M.render_projects_ui(projects)
+  end, {
+    buf = buf,
+    silent = true,
+  })
+  -- Close UI
+  vim.keymap.set("n", "<C-q>", function()
+    vim.api.nvim_win_close(M.ui, false)
   end, {
     buf = buf,
     silent = true,
@@ -97,8 +126,7 @@ function M.render_projects_ui(projects)
   local buf_lines = {}
   local buf_line_max_length = 0
   for i, project in ipairs(projects) do
-    print(project.name)
-    local project_line = " " .. project.name .. " - " .. project.path
+    local project_line = "  " .. project.name .. " - " .. project.path
     if #project_line > buf_line_max_length then
       buf_line_max_length = #project_line
     end
@@ -116,8 +144,9 @@ function M.render_projects_ui(projects)
     buf_line_max_length = 50
   end
 
-  local width = buf_line_max_length + 1
+  local width = buf_line_max_length
   local height = #projects + 1
+
   ---@type vim.api.keyset.win_config
   local win_cfg = {
     relative = "editor",
