@@ -13,19 +13,8 @@ M.projects_dir = vim.fn.stdpath("data") .. "/dumb-projects.nvim"
 M.projects_path = M.projects_dir .. "/projects.json"
 
 function M.setup()
-  -- create the base dir and projects file
-  local ok, err, err_name = vim.uv.fs_mkdir(M.projects_dir, tonumber("755", 8))
-  if not ok and err_name ~= "EEXIST" then
-    error("failed to create dir for dumb-projects: " .. err)
-  end
-  local f
-  f, err = vim.uv.fs_open(M.projects_path, "a", tonumber("644", 8))
-  if err then
-    error("failed to create projects.json file: " .. err)
-  end
-  if f then
-    vim.uv.fs_close(f)
-  end
+  -- create the base dir
+  vim.fn.mkdir(M.projects_dir, "p")
 
   -- TODO: add options to the plugin
 end
@@ -40,12 +29,10 @@ function M.set_buf_options(buffer)
 end
 
 function M.find_projects()
-  local projects_blob = vim.fn.readblob(M.projects_path)
   local projects = {}
   pcall(function()
-    projects = vim.json.decode(projects_blob)
+    projects = vim.json.decode(vim.fn.readblob(M.projects_path))
   end)
-  M.current_window = vim.api.nvim_get_current_win()
   M.render_projects_ui(projects)
 end
 
@@ -101,6 +88,9 @@ function M.add_ui_events(win, projects)
   })
   -- Delete Project
   vim.keymap.set("n", "<C-x>", function()
+    if #projects == 0 then
+      return
+    end
     local row = unpack(vim.api.nvim_win_get_cursor(M.ui))
     table.remove(projects, row)
 
@@ -114,7 +104,7 @@ function M.add_ui_events(win, projects)
   })
   -- Close UI
   vim.keymap.set("n", "<C-q>", function()
-    vim.api.nvim_win_close(M.ui, false)
+    vim.api.nvim_win_close(M.ui, true)
   end, {
     buf = buf,
     silent = true,
@@ -145,15 +135,18 @@ function M.render_projects_ui(projects)
   end
 
   local width = buf_line_max_length
-  local height = #projects + 1
+  local height = #projects
+  if height == 0 then
+    height = 1
+  end
 
   ---@type vim.api.keyset.win_config
   local win_cfg = {
     relative = "editor",
     width = width,
     height = height,
-    col = vim.api.nvim_win_get_width(M.current_window) / 2 - (width / 2),
-    row = vim.api.nvim_win_get_height(M.current_window) / 2 - (height / 2),
+    col = (vim.o.columns - width) / 2,
+    row = (vim.o.lines - height) / 2,
     title = "Projects",
     anchor = "NW",
     style = "minimal",
