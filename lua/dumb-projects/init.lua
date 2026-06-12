@@ -163,6 +163,7 @@ function M.render_projects_ui(projects)
   }
 
   M.set_buf_options(buf)
+  M.hide_cursor(buf)
   -- if projects window already exists set the new buffer
   local ok, _ = pcall(function()
     vim.api.nvim_win_set_buf(M.ui, buf)
@@ -175,10 +176,29 @@ function M.render_projects_ui(projects)
     M.ui = vim.api.nvim_open_win(buf, true, win_cfg)
   end
 
-  M.set_keymaps(M.ui, projects)
-
   vim.api.nvim_set_option_value("cursorline", true, { win = M.ui })
-  -- vim.api.nvim_set_hl(0, "HiddenCursor", { reverse = true, blend = 100 })
-  -- vim.opt.guicursor = "a:HiddenCursor"
+  M.set_keymaps(M.ui, projects)
 end
+
+---@param buffer integer
+function M.hide_cursor(buffer)
+  -- set a hidden cursor highlight
+  vim.api.nvim_set_hl(0, "HiddenCursor", { nocombine = true, blend = 100 })
+  local orig = vim.opt.guicursor
+  -- hide cursor when entering the buffer
+  vim.api.nvim_create_autocmd("BufEnter", {
+    buf = buffer,
+    callback = function()
+      vim.opt.guicursor = "a:HiddenCursor/HiddenCursor"
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("BufLeave", {
+    buf = buffer,
+    callback = function()
+      vim.opt.guicursor = orig
+    end,
+  })
+end
+
 return M
