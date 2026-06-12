@@ -38,8 +38,9 @@ end
 
 ---@param win integer
 ---@param projects M.projects
-function M.add_ui_events(win, projects)
+function M.set_keymaps(win, projects)
   local buf = vim.api.nvim_win_get_buf(win)
+
   -- Open Project
   vim.keymap.set("n", "<CR>", function()
     if #projects == 0 then
@@ -86,6 +87,7 @@ function M.add_ui_events(win, projects)
     buf = buf,
     silent = true,
   })
+
   -- Delete Project
   vim.keymap.set("n", "<C-x>", function()
     if #projects == 0 then
@@ -102,25 +104,33 @@ function M.add_ui_events(win, projects)
     buf = buf,
     silent = true,
   })
+
   -- Close UI
-  vim.keymap.set("n", "<C-q>", function()
+  vim.keymap.set("n", "q", function()
     vim.api.nvim_win_close(M.ui, true)
-  end, {
-    buf = buf,
-    silent = true,
-  })
+  end, { buf = buf, silent = true })
 end
 
 ---@param projects M.projects
 function M.render_projects_ui(projects)
   local buf_lines = {}
   local buf_line_max_length = 0
-  for i, project in ipairs(projects) do
-    local project_line = "  " .. project.name .. " - " .. project.path
+  local length = 0
+  -- trying to even the spaces
+  for _, project in ipairs(projects) do
+    local project_length = #project.name
+    if project_length > length then
+      length = project_length
+    end
+  end
+
+  for _, project in ipairs(projects) do
+    local project_length = #project.name
+    local project_line = " 󰉋 " .. project.name .. string.rep(" ", length - project_length) .. " - " .. project.path
     if #project_line > buf_line_max_length then
       buf_line_max_length = #project_line
     end
-    table.insert(buf_lines, i, project_line)
+    table.insert(buf_lines, project_line)
   end
 
   local buf = vim.api.nvim_create_buf(false, true)
@@ -164,6 +174,11 @@ function M.render_projects_ui(projects)
   else
     M.ui = vim.api.nvim_open_win(buf, true, win_cfg)
   end
-  M.add_ui_events(M.ui, projects)
+
+  M.set_keymaps(M.ui, projects)
+
+  vim.api.nvim_set_option_value("cursorline", true, { win = M.ui })
+  -- vim.api.nvim_set_hl(0, "HiddenCursor", { reverse = true, blend = 100 })
+  -- vim.opt.guicursor = "a:HiddenCursor"
 end
 return M
