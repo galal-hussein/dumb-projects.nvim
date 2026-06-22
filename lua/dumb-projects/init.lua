@@ -106,7 +106,7 @@ function M.set_keymaps(win, projects)
   })
 
   -- Close UI
-  vim.keymap.set("n", "q", function()
+  vim.keymap.set("n", "<Esc>", function()
     vim.api.nvim_win_close(M.ui, true)
   end, { buf = buf, silent = true })
 end
